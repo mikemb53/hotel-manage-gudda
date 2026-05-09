@@ -23,7 +23,7 @@ async function main() {
   let totalBooked = 0;
   for (const row of grid) {
     const bookedDays = row.days.filter((d: { booking?: unknown }) => d.booking);
-    const blockedDays = row.days.filter((d: { isBlocked?: boolean }) => d.isBlocked && !d.booking);
+    const blockedDays = row.days.filter((d: { isBlocked?: boolean; booking?: unknown }) => d.isBlocked && !d.booking);
     totalBooked += bookedDays.length;
     if (bookedDays.length > 0 || blockedDays.length > 0) {
       console.log(`Room ${row.roomNumber} - ${row.roomName}:`);
