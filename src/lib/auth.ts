@@ -77,7 +77,7 @@ export { handlers, signIn, signOut };
 // SQLite is only used in local mode — production always uses PostgreSQL.
 export const auth = (async (...args: Parameters<typeof _auth>) => {
   if ((process.env.DATABASE_URL ?? "").startsWith("file:")) {
-    return DEV_SESSION as Awaited<ReturnType<typeof _auth>>;
+    return DEV_SESSION as unknown as Awaited<ReturnType<typeof _auth>>;
   }
-  return _auth(...args as []);
+  return _auth(...args as unknown as []);
 }) as typeof _auth;
