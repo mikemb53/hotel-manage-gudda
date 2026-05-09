@@ -1,0 +1,231 @@
+// Hotel Channel Manager — Prisma Schema (SQLite / local dev)
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── Users & Auth ────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          String    @default("MANAGER")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  properties Property[]
+  sessions   Session[]
+  accounts   Account[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Property & Rooms ────────────────────────────────────────────────────────
+
+model Property {
+  id           String   @id @default(cuid())
+  name         String
+  address      String
+  city         String
+  state        String?
+  country      String
+  postalCode   String?
+  phone        String?
+  email        String?
+  website      String?
+  description  String?
+  timezone     String   @default("Asia/Kolkata")
+  currency     String   @default("INR")
+  checkInTime  String   @default("14:00")
+  checkOutTime String   @default("11:00")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownerId  String
+  owner    User      @relation(fields: [ownerId], references: [id])
+  rooms    Room[]
+  channels Channel[]
+}
+
+model RoomType {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  maxAdults   Int     @default(2)
+  maxChildren Int     @default(0)
+  // stored as JSON string e.g. '["WiFi","AC"]'
+  amenities   String  @default("[]")
+
+  rooms Room[]
+}
+
+model Room {
+  id          String   @id @default(cuid())
+  name        String
+  roomNumber  String
+  floorNumber Int?
+  status      String   @default("AVAILABLE")
+  basePrice   Decimal
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomTypeId String
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id])
+
+  bookings     Booking[]
+  ratePlans    RatePlan[]
+  availability Availability[]
+
+  @@unique([propertyId, roomNumber])
+}
+
+// ─── Availability ─────────────────────────────────────────────────────────────
+
+model Availability {
+  id        String   @id @default(cuid())
+  date      DateTime
+  isBlocked Boolean  @default(false)
+  minStay   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, date])
+  @@index([roomId, date])
+}
+
+// ─── Rate Plans ───────────────────────────────────────────────────────────────
+
+model RatePlan {
+  id         String    @id @default(cuid())
+  name       String
+  type       String    @default("STANDARD")
+  price      Decimal
+  startDate  DateTime?
+  endDate    DateTime?
+  // stored as JSON string e.g. '[1,2,3]'
+  daysOfWeek String    @default("[]")
+  minStay    Int       @default(1)
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+// ─── Bookings ─────────────────────────────────────────────────────────────────
+
+model Booking {
+  id              String   @id @default(cuid())
+  bookingRef      String   @unique
+  channelRef      String?
+  status          String   @default("CONFIRMED")
+  checkIn         DateTime
+  checkOut        DateTime
+  nights          Int
+  adults          Int      @default(1)
+  children        Int      @default(0)
+  totalAmount     Decimal
+  currency        String   @default("INR")
+  commissionRate  Decimal?
+  netAmount       Decimal?
+  specialRequests String?
+  notes           String?
+  source          String   @default("DIRECT")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id])
+  channelId String?
+  channel   Channel? @relation(fields: [channelId], references: [id])
+  guest     Guest?
+}
+
+model Guest {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  country   String?
+  createdAt DateTime @default(now())
+
+  bookingId String  @unique
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+// ─── Channels (OTA Integrations) ─────────────────────────────────────────────
+
+model Channel {
+  id          String    @id @default(cuid())
+  name        String
+  type        String
+  isActive    Boolean   @default(false)
+  credentials String?
+  icalUrl     String?
+  icalPushUrl String?
+  lastSyncAt  DateTime?
+  syncStatus  String    @default("IDLE")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  propertyId String
+  property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  bookings   Booking[]
+  syncLogs   SyncLog[]
+}
+
+// ─── Sync Logs ────────────────────────────────────────────────────────────────
+
+model SyncLog {
+  id        String   @id @default(cuid())
+  type      String
+  status    String
+  message   String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+}

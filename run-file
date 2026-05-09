@@ -1,0 +1,24 @@
+﻿LOCAL MODE  (no PostgreSQL, no login needed)
+
+  1. npm run use:local   <- one command: sets up SQLite DB,
+                           disables auth, seeds admin account
+  2. npm run dev         <- open http://localhost:3000/dashboard
+     Go directly to /dashboard -- no login required
+
+To restore production mode (PostgreSQL + login):
+  npm run use:prod       <- one command restores everything
+
+
+PRODUCTION MODE  (PostgreSQL + auth enabled)
+
+  1. Set DATABASE_URL and AUTH_SECRET in .env
+  2. npx prisma migrate dev --name init
+  3. npm run db:seed     <- creates admin account
+  4. npm run dev         <- open http://localhost:3000/login
+
+
+Default admin credentials (both modes)
+
+  Email    admin@hotel.com
+  Password Admin@123
+  Role     ADMIN

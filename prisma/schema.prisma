@@ -1,0 +1,297 @@
+// Hotel Channel Manager — Prisma Schema (PostgreSQL)
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Users & Auth ────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          UserRole  @default(MANAGER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  properties Property[]
+  sessions   Session[]
+  accounts   Account[]
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Property & Rooms ────────────────────────────────────────────────────────
+
+model Property {
+  id          String   @id @default(cuid())
+  name        String
+  address     String
+  city        String
+  state       String?
+  country     String
+  postalCode  String?
+  phone       String?
+  email       String?
+  website     String?
+  description String?  @db.Text
+  timezone    String   @default("Asia/Kolkata")
+  currency    String   @default("INR")
+  checkInTime  String  @default("14:00")
+  checkOutTime String  @default("11:00")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ownerId  String
+  owner    User      @relation(fields: [ownerId], references: [id])
+  rooms    Room[]
+  channels Channel[]
+}
+
+model RoomType {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  maxAdults   Int      @default(2)
+  maxChildren Int      @default(0)
+  amenities   String[]
+
+  rooms Room[]
+}
+
+model Room {
+  id          String     @id @default(cuid())
+  name        String
+  roomNumber  String
+  floorNumber Int?
+  status      RoomStatus @default(AVAILABLE)
+  basePrice   Decimal    @db.Decimal(10, 2)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomTypeId String
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id])
+
+  bookings     Booking[]
+  ratePlans    RatePlan[]
+  availability Availability[]
+
+  @@unique([propertyId, roomNumber])
+}
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  BLOCKED
+}
+
+// ─── Availability ─────────────────────────────────────────────────────────────
+
+model Availability {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  isBlocked Boolean  @default(false)
+  minStay   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, date])
+  @@index([roomId, date])
+}
+
+// ─── Rate Plans ───────────────────────────────────────────────────────────────
+
+model RatePlan {
+  id         String       @id @default(cuid())
+  name       String
+  type       RatePlanType @default(STANDARD)
+  price      Decimal      @db.Decimal(10, 2)
+  startDate  DateTime?    @db.Date
+  endDate    DateTime?    @db.Date
+  daysOfWeek Int[]
+  minStay    Int          @default(1)
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+enum RatePlanType {
+  STANDARD
+  WEEKEND
+  SEASONAL
+  PROMOTIONAL
+  LONG_STAY
+}
+
+// ─── Bookings ─────────────────────────────────────────────────────────────────
+
+model Booking {
+  id              String        @id @default(cuid())
+  bookingRef      String        @unique
+  channelRef      String?
+  status          BookingStatus @default(CONFIRMED)
+  checkIn         DateTime      @db.Date
+  checkOut        DateTime      @db.Date
+  nights          Int
+  adults          Int           @default(1)
+  children        Int           @default(0)
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  currency        String        @default("INR")
+  commissionRate  Decimal?      @db.Decimal(5, 2)
+  netAmount       Decimal?      @db.Decimal(10, 2)
+  specialRequests String?       @db.Text
+  notes           String?       @db.Text
+  source          BookingSource @default(DIRECT)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id])
+  channelId String?
+  channel   Channel? @relation(fields: [channelId], references: [id])
+  guest     Guest?
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+}
+
+enum BookingSource {
+  DIRECT
+  AIRBNB
+  BOOKING_COM
+  GOIBIBO
+  MAKEMYTRIP
+  AGODA
+  EXPEDIA
+  ICAL
+  OTHER
+}
+
+model Guest {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  country   String?
+  createdAt DateTime @default(now())
+
+  bookingId String  @unique
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+// ─── Channels (OTA Integrations) ─────────────────────────────────────────────
+
+model Channel {
+  id          String      @id @default(cuid())
+  name        String
+  type        ChannelType
+  isActive    Boolean     @default(false)
+  credentials Json?
+  icalUrl     String?
+  icalPushUrl String?
+  lastSyncAt  DateTime?
+  syncStatus  SyncStatus  @default(IDLE)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  propertyId String
+  property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  bookings   Booking[]
+  syncLogs   SyncLog[]
+}
+
+enum ChannelType {
+  AIRBNB
+  BOOKING_COM
+  GOIBIBO
+  MAKEMYTRIP
+  AGODA
+  EXPEDIA
+  ICAL
+  DIRECT
+}
+
+enum SyncStatus {
+  IDLE
+  SYNCING
+  SUCCESS
+  FAILED
+}
+
+// ─── Sync Logs ────────────────────────────────────────────────────────────────
+
+model SyncLog {
+  id        String      @id @default(cuid())
+  type      SyncLogType
+  status    SyncStatus
+  message   String?     @db.Text
+  details   Json?
+  createdAt DateTime    @default(now())
+
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+}
+
+enum SyncLogType {
+  AVAILABILITY_PUSH
+  RATE_PUSH
+  BOOKING_PULL
+  FULL_SYNC
+  WEBHOOK
+}
